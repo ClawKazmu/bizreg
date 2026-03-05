@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Philippine Business Registration Checker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 {
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        main {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-item input {
+            width: auto;
+            transform: scale(1.2);
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        .results.show {
+            display: block;
+        }
+        .result-card {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+        }
+        .result-card.positive {
+            background: #e8f5e9;
+            border-color: #4caf50;
+        }
+        .result-card.negative {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+        .result-card.neutral {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        .result-card h3 {
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        .result-status {
+            font-weight: bold;
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        .status-available {
+            background: #4caf50;
+            color: white;
+        }
+        .status-unavailable {
+            background: #f44336;
+            color: white;
+        }
+        .status-error {
+            background: #ff9800;
+            color: white;
+        }
+        .loader {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+        .loader.show {
+            display: block;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fee-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .fee-table th, .fee-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .fee-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .fee-table tr:last-child td {
+            border-bottom: none;
+        }
+        .total-row {
+            font-weight: bold;
+            background: #e3f2fd !important;
+        }
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font: inherit;
+            font-size: 1rem;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+        .tab:hover {
+            background: #f0f0f0;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .step-list {
+            padding-left: 20px;
+        }
+        .step-list li {
+            margin-bottom: 10px;
+            padding-left: 10px;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🇵🇭 Philippine Business Registration Checker</h1>
+            <p>Check name availability across DTI and SEC, calculate fees, and get step-by-step guidance</p>
+        </header>
+
+        <main>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('check')">🔍 Check Name</button>
+                <button class="tab" onclick="switchTab('fees')">💰 Fee Calculator</button>
+                <button class="tab" onclick="switchTab('advisor')">📋 Advisor</button>
+            </div>
+
+            <!-- Tab 1: Check Name -->
+            <div id="tab-check" class="tab-content active">
+                <div class="section">
+                    <h2>🔍 Check Business Name Availability</h2>
+                    <form id="checkForm">
+                        <div class="form-group">
+                            <label for="businessName">Business Name</label>
+                            <input type="text" id="businessName" name="business_name" placeholder="Enter proposed business name (e.g., 'Mabuhay Coffee Shop')" required>
+                        </div>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="include_dti" name="include_dti" checked>
+                                <label for="include_dti">Check DTI (BNRS)</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="include_sec" name="include_sec" checked>
+                                <label for="include_sec">Check SEC (eSPARC)</label>
+                            </div>
+                        </div>
+                        <div class="form-group" id="dtiScopeGroup">
+                            <label for="dti_scope">DTI Registration Scope</label>
+                            <select id="dti_scope" name="dti_scope">
+                                <option value="barangay">Barangay</option>
+                                <option value="city">City/Municipality</option>
+                                <option value="regional">Regional</option>
+                                <option value="national" selected>National</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="secCompanyGroup">
+                            <label for="sec_company_type">SEC Company Type</label>
+                            <select id="sec_company_type" name="sec_company_type">
+                                <option value="corporation">Corporation (Stock/Non-Stock)</option>
+                                <option value="partnership">Partnership</option>
+                                <option value="foreign">Foreign Corporation</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="checkBtn">Check Availability</button>
+                    </form>
+                </div>
+
+                <div class="loader" id="loader">
+                    <div class="spinner"></div>
+                    <p>Checking name across government systems... This may take 10-30 seconds.</p>
+                </div>
+
+                <div class="results" id="results">
+                    <div id="resultCards"></div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Fee Calculator -->
+            <div id="tab-fees" class="tab-content">
+                <div class="section">
+                    <h2>💰 Government Fee Calculator</h2>
+                    <form id="feeForm">
+                        <div class="form-group">
+                            <label for="fee_agency">Agency</label>
+                            <select id="fee_agency" name="agency">
+                                <option value="DTI">DTI (Business Name Registration)</option>
+                                <option value="SEC" selected>SEC (Company Registration)</option>
+                                <option value="BIR">BIR (Tax Registration)</option>
+                                <option value="LGU">LGU (Mayor's Permit)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fee_business_type">Business Type</label>
+                            <select id="fee_business_type" name="business_type">
+                                <option value="sole_proprietorship">Sole Proprietorship</option>
+                                <option value="corporation" selected>Corporation</option>
+                                <option value="partnership">Partnership</option>
+                                <option value="cooperative">Cooperative</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="feeBtn">Calculate Fees</button>
+                    </form>
+                </div>
+
+                <div class="results" id="feeResults">
+                    <div class="result-card neutral">
+                        <h3>Fee Breakdown</h3>
+                        <table class="fee-table" id="feeTable"></table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Advisor -->
+            <div id="tab-advisor" class="tab-content">
+                <div class="section">
+                    <h2>📋 Business Registration Advisor</h2>
+                    <form id="advisorForm">
+                        <div class="form-group">
+                            <label for="advisor_business_type">Business Type</label>
+                            <select id="advisor_business_type" name="business_type">
+                                <option value="sole_proprietorship">Sole Proprietorship</option>
+                                <option value="corporation">Corporation</option>
+                                <option value="partnership">Partnership</option>
+                                <option value="cooperative">Cooperative</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="advisorBtn">Get Checklist</button>
+                    </form>
+                </div>
+
+                <div class="results" id="advisorResults">
+                    <div class="result-card neutral">
+                        <h3>Registration Requirements & Steps</h3>
+                        <div id="advisorContent"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>This tool provides estimates and checks for informational purposes only.</p>
+            <p>Always verify with official government sources and consult with a professional.</p>
+            <p><small>API Base: <span id="apiBase"></span></small></p>
+        </footer>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        document.getElementById('apiBase').textContent = API_BASE;
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Name check
+        document.getElementById('checkForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loader = document.getElementById('loader');
+            const results = document.getElementById('results');
+            const resultCards = document.getElementById('resultCards');
+
+            // Prepare request
+            const businessName = document.getElementById('businessName').value.trim();
+            const includeDti = document.getElementById('include_dti').checked;
+            const includeSec = document.getElementById('include_sec').checked;
+            const dtiScope = document.getElementById('dti_scope').value;
+            const secCompanyType = document.getElementById('sec_company_type').value;
+
+            if (!businessName) {
+                alert('Please enter a business name');
+                return;
+            }
+
+            if (!includeDti && !includeSec) {
+                alert('Please select at least one agency to check');
+                return;
+            }
+
+            // Show loader, hide previous results
+            loader.classList.add('show');
+            results.classList.remove('show');
+            resultCards.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/check-name`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        business_name: businessName,
+                        include_dti: includeDti,
+                        include_sec: includeSec,
+                        dti_scope: dtiScope,
+                        sec_company_type: secCompanyType
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(err.detail || `HTTP error ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayCheckResults(data);
+
+            } catch (error) {
+                resultCards.innerHTML = `
+                    <div class="result-card negative">
+                        <div class="result-status status-error">Error</div>
+                        <p>Failed to check name: ${error.message}</p>
+                        <p><small>Make sure the backend server is running at ${API_BASE}</small></p>
+                    </div>
+                `;
+            } finally {
+                loader.classList.remove('show');
+                results.classList.add('show');
+            }
+        });
+
+        function displayCheckResults(data) {
+            const resultCards = document.getElementById('resultCards');
+            let html = '';
+
+            if (data.dti_available !== null) {
+                const dtiClass = data.dti_available ? 'positive' : 'negative';
+                const dtiStatus = data.dti_available ? '✅ Available (DTI)' : '❌ Not Available (DTI)';
+                html += `
+                    <div class="result-card ${dtiClass}">
+                        <div class="result-status ${data.dti_available ? 'status-available' : 'status-unavailable'}">${dtiStatus}</div>
+                        <p>${data.dti_message || 'No message from DTI'}</p>
+                    </div>
+                `;
+            }
+
+            if (data.sec_available !== null) {
+                const secClass = data.sec_available ? 'positive' : 'negative';
+                const secStatus = data.sec_available ? '✅ Available (SEC)' : '❌ Not Available (SEC)';
+                html += `
+                    <div class="result-card ${secClass}">
+                        <div class="result-status ${data.sec_available ? 'status-available' : 'status-unavailable'}">${secStatus}</div>
+                        <p>${data.sec_message || 'No message from SEC'}</p>
+                    </div>
+                `;
+            }
+
+            if (!html) {
+                html = '<div class="result-card neutral"><p>No results to display. Select at least one agency.</p></div>';
+            }
+
+            resultCards.innerHTML = html;
+        }
+
+        // Fee calculator
+        document.getElementById('feeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const agency = document.getElementById('fee_agency').value;
+            const businessType = document.getElementById('fee_business_type').value;
+            const resultsDiv = document.getElementById('feeResults');
+            const table = document.getElementById('feeTable');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/fees?agency=${encodeURIComponent(agency)}&business_type=${encodeURIComponent(businessType)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                const data = await response.json();
+                displayFeeResults(data);
+                resultsDiv.classList.add('show');
+            } catch (error) {
+                table.innerHTML = `<tr><td colspan="2">Error: ${error.message}</td></tr>`;
+                resultsDiv.classList.add('show');
+            }
+        });
+
+        function displayFeeResults(data) {
+            const table = document.getElementById('feeTable');
+            let html = '<thead><tr><th>Item</th><th>Amount (₱)</th></tr></thead><tbody>';
+
+            if (data.fees && data.fees.length > 0) {
+                for (const fee of data.fees) {
+                    html += `<tr><td>${fee.item}</td><td>₱${fee.amount.toFixed(2)}</td></tr>`;
+                }
+                html += `<tr class="total-row"><td><strong>Total</strong></td><td><strong>₱${data.total.toFixed(2)}</strong></td></tr>`;
+            } else {
+                html += `<tr><td colspan="2">No fee data available</td></tr>`;
+            }
+            html += '</tbody>';
+            table.innerHTML = html;
+        }
+
+        // Advisor
+        document.getElementById('advisorForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const businessType = document.getElementById('advisor_business_type').value;
+            const resultsDiv = document.getElementById('advisorResults');
+            const content = document.getElementById('advisorContent');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/advisor?business_type=${encodeURIComponent(businessType)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                const data = await response.json();
+                displayAdvisorResults(data);
+                resultsDiv.classList.add('show');
+            } catch (error) {
+                content.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+                resultsDiv.classList.add('show');
+            }
+        });
+
+        function displayAdvisorResults(data) {
+            const content = document.getElementById('advisorContent');
+            let html = '';
+
+            html += `<p><strong>Estimated Cost:</strong> ₱${data.estimated_cost_peso.toLocaleString()}</p>`;
+            html += `<p><strong>Estimated Processing Time:</strong> ${data.estimated_days} days</p>`;
+            html += `<p><strong>Required Agencies:</strong> ${data.agencies.join(', ')}</p>`;
+            html += `<p><em>${data.notes}</em></p>`;
+
+            if (data.steps && data.steps.length > 0) {
+                html += `<h4>Registration Steps:</h4><ol class="step-list">`;
+                for (const step of data.steps) {
+                    html += `<li>${step}</li>`;
+                }
+                html += `</ol>`;
+            }
+
+            content.innerHTML = html;
+        }
+
+        // Toggle DTI/SEC scope options based on checkboxes
+        document.getElementById('include_dti').addEventListener('change', (e) => {
+            document.getElementById('dtiScopeGroup').style.display = e.target.checked ? 'block' : 'none';
+        });
+        document.getElementById('include_sec').addEventListener('change', (e) => {
+            document.getElementById('secCompanyGroup').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // Initial state
+        document.getElementById('dtiScopeGroup').style.display = document.getElementById('include_dti').checked ? 'block' : 'none';
+        document.getElementById('secCompanyGroup').style.display = document.getElementById('include_sec').checked ? 'block' : 'none';
+    </script>
+</body>
+</html>

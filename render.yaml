@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: bizreg-api
+    runtime: python
+    buildCommand: |
+      pip install -r requirements.txt
+      playwright install chromium
+      playwright install-deps
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SCRAPER_DELAY
+        value: 1
+    healthCheckPath: /
+    plan: free  # or 'basic' for production
+
+# Note:
+# - Uses Playwright to scrape government websites (DTI BNRS, SEC eSPARC)
+# - Requires system dependencies for Chromium
+# - Consider using a paid plan for reliable uptime and more resources
+# - For production, add DATABASE_URL if using PostgreSQL
+# - Set SCRAPER_DELAY to be polite with rate limits
