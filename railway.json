@@ -1,6 +1,10 @@
 {
   "build": {
-    "builder": "docker"
+    "builder": "nixpacks",
+    "env": {
+      "PYTHON_VERSION": "3.11"
+    },
+    "preBuild": "pip install -r requirements.txt && playwright install chromium"
   },
   "deploy": {
     "startCommand": "gunicorn app.main:app --bind 0.0.0.0:$PORT -k uvicorn.workers.UvicornWorker",
