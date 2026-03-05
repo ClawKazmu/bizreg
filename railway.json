@@ -1,16 +1,17 @@
 {
+  "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "nixpacks",
+    "builder": "NIXPACKS",
     "env": {
       "PYTHON_VERSION": "3.11"
     },
     "preBuild": "pip install -r requirements.txt && playwright install chromium"
   },
   "deploy": {
-    "startCommand": "gunicorn app.main:app --bind 0.0.0.0:$PORT -k uvicorn.workers.UvicornWorker",
+    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
     "healthcheckPath": "/health",
     "restartPolicy": {
-      "type": "onFailure"
+      "type": "ON_FAILURE"
     }
   }
 }
