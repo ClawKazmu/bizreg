@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -7,6 +7,8 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime, timezone
+import json
 from .scrapers import DTIBNRSScraper, SECCRSScraper, ScraperError
 
 load_dotenv()
@@ -19,6 +21,154 @@ app = FastAPI(title="Philippine Business Registration Checker", version="0.2.0")
 STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Rate limiting configuration
+FREE_TIER_LIMIT = int(os.getenv("FREE_TIER_LIMIT", "20"))  # checks per month
+RATE_LIMIT_DB = Path(os.getenv("RATE_LIMIT_DB", "data/rate_limits.json"))
+
+class RateLimiter:
+    """Simple file-based rate limiter with monthly reset."""
+
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._ensure_db()
+
+    def _ensure_db(self):
+        """Ensure data directory and DB file exist."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.db_path.exists():
+            self._save({})
+
+    def _load(self) -> dict:
+        """Load rate limit data from file."""
+        try:
+            with open(self.db_path, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {}
+
+    def _save(self, data: dict):
+        """Save rate limit data to file."""
+        with open(self.db_path, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    def get_current_month_key(self) -> str:
+        """Return YYYY-MM string for current month."""
+        return datetime.now(timezone.utc).strftime("%Y-%m")
+
+    def check_and_increment(self, user_id: str) -> dict:
+        """
+        Check if user has quota remaining and increment count.
+        Returns dict with 'allowed' (bool), 'remaining' (int), 'reset_at' (str).
+        """
+        if not user_id:
+            return {
+                "allowed": False,
+                "remaining": 0,
+                "reset_at": None,
+                "error": "User identifier required (X-User-Email or X-API-Key header)"
+            }
+
+        data = self._load()
+        current_month = self.get_current_month_key()
+        user_key = f"user:{user_id}"
+
+        # Get or initialize user record
+        if user_key not in data or data[user_key].get("month") != current_month:
+            # New user or new month - reset counter
+            data[user_key] = {
+                "count": 0,
+                "month": current_month,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+
+        user_data = data[user_key]
+        remaining = FREE_TIER_LIMIT - user_data["count"]
+
+        if remaining <= 0:
+            # Calculate next reset (first day of next month)
+            now = datetime.now(timezone.utc)
+            if now.month == 12:
+                next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+            else:
+                next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+
+            return {
+                "allowed": False,
+                "remaining": 0,
+                "reset_at": next_month.isoformat(),
+                "used": user_data["count"],
+                "limit": FREE_TIER_LIMIT
+            }
+
+        # Increment and save
+        user_data["count"] += 1
+        user_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        data[user_key] = user_data
+        self._save(data)
+
+        # Calculate next reset
+        now = datetime.now(timezone.utc)
+        if now.month == 12:
+            next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+
+        return {
+            "allowed": True,
+            "remaining": remaining - 1,
+            "reset_at": next_month.isoformat(),
+            "used": user_data["count"],
+            "limit": FREE_TIER_LIMIT
+        }
+
+# Initialize rate limiter
+rate_limiter = RateLimiter(RATE_LIMIT_DB)
+
+async def get_user_identifier(
+    request: Request,
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email"),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+) -> str:
+    """
+    Extract user identifier from headers.
+    Priority: X-User-Email > X-API-Key
+    """
+    if x_user_email:
+        return x_user_email.strip().lower()
+    elif x_api_key:
+        return x_api_key.strip()
+    else:
+        # For unauthenticated requests, use IP address as fallback
+        # (not ideal but provides some tracking)
+        client_host = request.client.host if request.client else "unknown"
+        return f"ip:{client_host}"
+
+class RateLimitError(Exception):
+    """Raised when rate limit is exceeded."""
+    def __init__(self, remaining: int, reset_at: str, used: int, limit: int):
+        self.remaining = remaining
+        self.reset_at = reset_at
+        self.used = used
+        self.limit = limit
+        super().__init__(f"Rate limit exceeded. Used {used}/{limit}")
+
+async def enforce_rate_limit(user_id: str) -> dict:
+    """
+    Enforce rate limit for check-name endpoint.
+    Raises RateLimitError if limit exceeded.
+    """
+    result = rate_limiter.check_and_increment(user_id)
+
+    if not result["allowed"]:
+        raise RateLimitError(
+            remaining=result["remaining"],
+            reset_at=result["reset_at"],
+            used=result["used"],
+            limit=result["limit"]
+        )
+
+    return result
 
 class NameCheckRequest(BaseModel):
     business_name: str
@@ -48,11 +198,35 @@ async def serve_ui():
     return HTMLResponse(content="<h1>Frontend not found. Please ensure static/index.html exists.</h1>", status_code=404)
 
 @app.post("/api/check-name", response_model=NameCheckResponse)
-async def check_name(req: NameCheckRequest):
+async def check_name(
+    req: NameCheckRequest,
+    request: Request,
+    user_id: str = Depends(get_user_identifier)
+):
     """
     Check business name availability across DTI and SEC using live scrapers.
+    Free tier: 20 checks/month. Provide X-User-Email or X-API-Key header.
+    Premium: Unlimited checks. Contact for upgrade.
     """
-    logger.info(f"Checking name: {req.business_name}")
+    # Enforce rate limit
+    try:
+        rate_info = await enforce_rate_limit(user_id)
+        logger.info(f"Rate limit check passed for user {user_id}. Remaining: {rate_info['remaining']}")
+    except RateLimitError as e:
+        logger.warning(f"Rate limit exceeded for user {user_id}: {e}")
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "rate_limit_exceeded",
+                "message": "Free tier monthly limit reached",
+                "used": e.used,
+                "limit": e.limit,
+                "remaining": 0,
+                "reset_at": e.reset_at,
+                "upgrade_url": "https://bizreg.ph/upgrade",  # TODO: Update with actual URL
+                "upgrade_message": "Upgrade to Premium for unlimited checks and priority support."
+            }
+        )
     response = NameCheckResponse(name=req.business_name)
 
     # Check DTI if requested
@@ -90,6 +264,49 @@ async def check_name(req: NameCheckRequest):
     response.notes = " | ".join(notes) if notes else "Name check completed"
 
     return response
+
+@app.get("/api/rate-limit")
+async def get_rate_limit_status(
+    request: Request,
+    user_id: str = Depends(get_user_identifier)
+):
+    """
+    Get current rate limit status for the calling user.
+    """
+    data = rate_limiter._load()
+    current_month = rate_limiter.get_current_month_key()
+    user_key = f"user:{user_id}"
+
+    if user_key in data and data[user_key].get("month") == current_month:
+        user_data = data[user_key]
+        used = user_data["count"]
+        remaining = max(0, FREE_TIER_LIMIT - used)
+
+        # Calculate next reset
+        now = datetime.now(timezone.utc)
+        if now.month == 12:
+            next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+
+        return {
+            "user_id": user_id,
+            "limit": FREE_TIER_LIMIT,
+            "used": used,
+            "remaining": remaining,
+            "reset_at": next_month.isoformat(),
+            "status": "exceeded" if remaining <= 0 else "active"
+        }
+    else:
+        # No usage yet this month
+        return {
+            "user_id": user_id,
+            "limit": FREE_TIER_LIMIT,
+            "used": 0,
+            "remaining": FREE_TIER_LIMIT,
+            "reset_at": None,
+            "status": "active"
+        }
 
 @app.get("/api/advisor")
 def advisor(business_type: Optional[str] = None, sole_proprietor: bool = False, corporation: bool = False):

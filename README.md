@@ -37,16 +37,57 @@ uvicorn app.main:app --reload
 |----------|--------|-------------|
 | `/` | GET | Health check |
 | `/api/check-name` | POST | Check name across DTI/SEC (live scrapers) |
+| `/api/rate-limit` | GET | Get current rate limit status for the caller |
 | `/api/advisor` | GET | Business type recommendations and checklist |
 | `/api/fees` | GET | Fee calculator for agencies (DTI, SEC, BIR, LGU) |
 | `/ui` | GET | Frontend interface (HTML) |
 | `/docs` | GET | Interactive API docs (Swagger) |
+
+### Rate Limiting
+
+- **Free tier**: 20 checks per month per user
+- **Tracking**: By `X-User-Email` header or `X-API-Key` (for programmatic access)
+- **When limit exceeded**: HTTP 429 response with reset information and upgrade options
+- **Reset**: First day of each month (UTC)
+
+#### Request Headers
+
+To track your usage and avoid sharing limits with other users, include one of:
+
+```http
+X-User-Email: your-email@example.com
+# or
+X-API-Key: your-api-key
+```
+
+If no headers are provided, usage is tracked by IP address (less reliable, may reset on network changes).
+
+#### Rate Limit Exceeded Response
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "message": "Free tier monthly limit reached",
+  "used": 20,
+  "limit": 20,
+  "remaining": 0,
+  "reset_at": "2025-04-01T00:00:00Z",
+  "upgrade_url": "https://bizreg.ph/upgrade",
+  "upgrade_message": "Upgrade to Premium for unlimited checks and priority support."
+}
+```
+
+#### Premium Tier
+
+Unlimited monthly checks, priority support, and higher rate limits on scrapers.
+Contact [premium@bizreg.ph](mailto:premium@bizreg.ph) or visit [bizreg.ph/upgrade](https://bizreg.ph/upgrade).
 
 ### Check Name Request Example
 
 ```bash
 curl -X POST "http://localhost:8000/api/check-name" \
   -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
   -d '{
     "business_name": "Mabuhay Coffee",
     "include_dti": true,
@@ -55,7 +96,27 @@ curl -X POST "http://localhost:8000/api/check-name" \
   }'
 ```
 
-### Response Example
+### Rate Limit Status Example
+
+```bash
+curl -X GET "http://localhost:8000/api/rate-limit" \
+  -H "X-User-Email: user@example.com"
+```
+
+Response:
+
+```json
+{
+  "user_id": "user@example.com",
+  "limit": 20,
+  "used": 5,
+  "remaining": 15,
+  "reset_at": "2025-04-01T00:00:00Z",
+  "status": "active"
+}
+```
+
+### Check Name Response Example
 
 ```json
 {
